@@ -5,6 +5,38 @@ SHELL := /bin/bash
 # Allow: make restore RESTORE_PATHS="Documents/ .config/Code/User/"
 RESTORE_PATHS ?=
 
+# Passkey check: resolves passphrase mode and sets shell vars _pv and _paranoid.
+# _pv     : --volume flag for the passkey file (empty in paranoid mode)
+# _paranoid: PARANOID_MODE value to pass into the container
+# Usage: $(call _passkey_check,/container/path/to/passfile)
+define _passkey_check
+if [ "${PARANOID_MODE}" = "true" ]; then \
+	_pv=""; _paranoid="true"; \
+else \
+	if [ -d "${GOCRYPTFS_PASSKEY_FILE}" ]; then \
+		echo "Removing stale directory '${GOCRYPTFS_PASSKEY_FILE}' (Docker artifact)..."; \
+		rmdir "${GOCRYPTFS_PASSKEY_FILE}" || { echo "Error: '${GOCRYPTFS_PASSKEY_FILE}' is a non-empty directory."; exit 1; }; \
+	fi; \
+	if [ ! -f "${GOCRYPTFS_PASSKEY_FILE}" ]; then \
+		echo "Passkey file '${GOCRYPTFS_PASSKEY_FILE}' not found."; \
+		read -r -p "Enter passphrase interactively without saving to disk? [y/N] " _choice; \
+		if [ "$$_choice" = "y" ] || [ "$$_choice" = "Y" ]; then \
+			echo "Switching to interactive passphrase for this run."; \
+			_pv=""; _paranoid="true"; \
+		else \
+			read -r -p "Enter a passphrase to create it: " passphrase; \
+			printf '%s' "$$passphrase" > "${GOCRYPTFS_PASSKEY_FILE}"; \
+			echo "Passkey file created at ${GOCRYPTFS_PASSKEY_FILE}"; \
+			chmod 600 "${GOCRYPTFS_PASSKEY_FILE}"; \
+			_pv="--volume ${GOCRYPTFS_PASSKEY_FILE}:$(1)"; _paranoid="false"; \
+		fi; \
+	else \
+		chmod 600 "${GOCRYPTFS_PASSKEY_FILE}"; \
+		_pv="--volume ${GOCRYPTFS_PASSKEY_FILE}:$(1)"; _paranoid="false"; \
+	fi; \
+fi
+endef
+
 .PHONY: build backup backup_as_root \
         restore restore_to_origin restore_as_root restore_as_root_to_origin \
         view view_as_root \
@@ -53,26 +85,32 @@ clean:
 	       ${BACKUP_ENCRYPTION_CONF}
 	@echo "Done."
 
+# Standalone passkey setup utility (useful for verifying or pre-creating the passkey file).
 check-passkey:
-	@if [ -d "${GOCRYPTFS_PASSKEY_FILE}" ]; then \
-		echo "Removing stale directory '${GOCRYPTFS_PASSKEY_FILE}' (Docker artifact)..."; \
-		rmdir "${GOCRYPTFS_PASSKEY_FILE}" || { echo "Error: '${GOCRYPTFS_PASSKEY_FILE}' is a non-empty directory."; exit 1; }; \
-	fi; \
-	if [ ! -f "${GOCRYPTFS_PASSKEY_FILE}" ]; then \
-		echo "Passkey file '${GOCRYPTFS_PASSKEY_FILE}' not found."; \
-		read -r -p "Enter a passphrase to create it: " passphrase && \
-		printf '%s' "$$passphrase" > "${GOCRYPTFS_PASSKEY_FILE}" && \
-		echo "Passkey file created at ${GOCRYPTFS_PASSKEY_FILE}"; \
-	fi; \
-	if [ -f "${GOCRYPTFS_PASSKEY_FILE}" ]; then \
-		chmod 600 "${GOCRYPTFS_PASSKEY_FILE}"; \
+	@if [ "${PARANOID_MODE}" = "true" ]; then \
+		echo "PARANOID_MODE is enabled: passphrase will be entered interactively. No passkey file needed."; \
 	else \
-		echo "Error: passkey file '${GOCRYPTFS_PASSKEY_FILE}' could not be created."; \
-		exit 1; \
+		if [ -d "${GOCRYPTFS_PASSKEY_FILE}" ]; then \
+			echo "Removing stale directory '${GOCRYPTFS_PASSKEY_FILE}' (Docker artifact)..."; \
+			rmdir "${GOCRYPTFS_PASSKEY_FILE}" || { echo "Error: '${GOCRYPTFS_PASSKEY_FILE}' is a non-empty directory."; exit 1; }; \
+		fi; \
+		if [ ! -f "${GOCRYPTFS_PASSKEY_FILE}" ]; then \
+			echo "Passkey file '${GOCRYPTFS_PASSKEY_FILE}' not found."; \
+			read -r -p "Enter a passphrase to create it: " passphrase && \
+			printf '%s' "$$passphrase" > "${GOCRYPTFS_PASSKEY_FILE}" && \
+			echo "Passkey file created at ${GOCRYPTFS_PASSKEY_FILE}"; \
+		fi; \
+		if [ -f "${GOCRYPTFS_PASSKEY_FILE}" ]; then \
+			chmod 600 "${GOCRYPTFS_PASSKEY_FILE}"; \
+		else \
+			echo "Error: passkey file '${GOCRYPTFS_PASSKEY_FILE}' could not be created."; \
+			exit 1; \
+		fi; \
 	fi
 
-backup: check-passkey
-	@docker run \
+backup:
+	@$(call _passkey_check,/backup/passfile); \
+	docker run \
 		--name gocryptfs \
 		--user root \
 		--cap-add SYS_ADMIN \
@@ -84,7 +122,8 @@ backup: check-passkey
 		--volume ${BACKUP_FILTER_RULES}:/backup/brave-filter-rules.txt \
 		--volume ${SSH_KEY_FILE}:/root/.ssh/id_rsa \
 		--volume ${SSH_KNOWN_HOSTS_FILE}:/root/.ssh/known_hosts \
-		--volume ${GOCRYPTFS_PASSKEY_FILE}:/backup/passfile \
+		$$_pv \
+		--env PARANOID_MODE=$$_paranoid \
 		--rm \
 		--interactive --tty ${DOCKER_IMAGE_TAG_NAME}:${DOCKER_IMAGE_TAG_VERSION} \
 		/app/backup.sh \
@@ -100,8 +139,9 @@ backup: check-passkey
 			${GOCRYPTFS_SCRYPT_N} \
 			${GOCRYPTFS_ENCRYPT_NAMES}
 
-backup_as_root: check-passkey
-	@docker run \
+backup_as_root:
+	@$(call _passkey_check,/backup/passfile); \
+	docker run \
 		--name gocryptfs \
 		--user root \
 		--cap-add SYS_ADMIN \
@@ -117,7 +157,8 @@ backup_as_root: check-passkey
 		--volume ${BACKUP_ENCRYPTION_CONF}:/backup/src/.gocryptfs.reverse.conf.original \
 		--volume ${SSH_KEY_FILE}:/root/.ssh/id_rsa \
 		--volume ${SSH_KNOWN_HOSTS_FILE}:/root/.ssh/known_hosts \
-		--volume ${GOCRYPTFS_PASSKEY_FILE}:/backup/passfile \
+		$$_pv \
+		--env PARANOID_MODE=$$_paranoid \
 		--rm \
 		--interactive --tty ${DOCKER_IMAGE_TAG_NAME}:${DOCKER_IMAGE_TAG_VERSION} \
 		/app/backup.sh \
@@ -134,8 +175,9 @@ backup_as_root: check-passkey
 			${GOCRYPTFS_ENCRYPT_NAMES}
 
 # Restore user backup to a staging directory (safe — review before moving)
-restore: check-passkey
-	@docker run \
+restore:
+	@$(call _passkey_check,/restore/passfile); \
+	docker run \
 		--name gocryptfs \
 		--user root \
 		--cap-add SYS_ADMIN \
@@ -147,8 +189,9 @@ restore: check-passkey
 		--volume ${RESTORE_EXCLUDE_LIST}:/restore/restore-exclude-list.txt \
 		--volume ${SSH_KEY_FILE}:/root/.ssh/id_rsa \
 		--volume ${SSH_KNOWN_HOSTS_FILE}:/root/.ssh/known_hosts \
-		--volume ${GOCRYPTFS_PASSKEY_FILE}:/restore/passfile \
+		$$_pv \
 		--env RESTORE_PATHS='${RESTORE_PATHS}' \
+		--env PARANOID_MODE=$$_paranoid \
 		--rm \
 		--interactive --tty ${DOCKER_IMAGE_TAG_NAME}:${DOCKER_IMAGE_TAG_VERSION} \
 		/app/restore.sh \
@@ -164,8 +207,9 @@ restore: check-passkey
 			"/restore/restore-paths.txt"
 
 # Restore user backup directly to original home directory
-restore_to_origin: check-passkey
-	@docker run \
+restore_to_origin:
+	@$(call _passkey_check,/restore/passfile); \
+	docker run \
 		--name gocryptfs \
 		--user root \
 		--cap-add SYS_ADMIN \
@@ -177,8 +221,9 @@ restore_to_origin: check-passkey
 		--volume ${RESTORE_EXCLUDE_LIST}:/restore/restore-exclude-list.txt \
 		--volume ${SSH_KEY_FILE}:/root/.ssh/id_rsa \
 		--volume ${SSH_KNOWN_HOSTS_FILE}:/root/.ssh/known_hosts \
-		--volume ${GOCRYPTFS_PASSKEY_FILE}:/restore/passfile \
+		$$_pv \
 		--env RESTORE_PATHS='${RESTORE_PATHS}' \
+		--env PARANOID_MODE=$$_paranoid \
 		--rm \
 		--interactive --tty ${DOCKER_IMAGE_TAG_NAME}:${DOCKER_IMAGE_TAG_VERSION} \
 		/app/restore.sh \
@@ -194,8 +239,9 @@ restore_to_origin: check-passkey
 			"/restore/restore-paths.txt"
 
 # Restore root backup to a staging directory (safe — review before moving)
-restore_as_root: check-passkey
-	@docker run \
+restore_as_root:
+	@$(call _passkey_check,/restore/passfile); \
+	docker run \
 		--name gocryptfs \
 		--user root \
 		--cap-add SYS_ADMIN \
@@ -207,8 +253,9 @@ restore_as_root: check-passkey
 		--volume ${RESTORE_EXCLUDE_LIST}:/restore/restore-exclude-list.txt \
 		--volume ${SSH_KEY_FILE}:/root/.ssh/id_rsa \
 		--volume ${SSH_KNOWN_HOSTS_FILE}:/root/.ssh/known_hosts \
-		--volume ${GOCRYPTFS_PASSKEY_FILE}:/restore/passfile \
+		$$_pv \
 		--env RESTORE_PATHS='${RESTORE_PATHS}' \
+		--env PARANOID_MODE=$$_paranoid \
 		--rm \
 		--interactive --tty ${DOCKER_IMAGE_TAG_NAME}:${DOCKER_IMAGE_TAG_VERSION} \
 		/app/restore.sh \
@@ -224,8 +271,9 @@ restore_as_root: check-passkey
 			"/restore/restore-paths.txt"
 
 # Restore root backup directly to original system paths (/etc, /home, /opt, /root, /srv)
-restore_as_root_to_origin: check-passkey
-	@docker run \
+restore_as_root_to_origin:
+	@$(call _passkey_check,/restore/passfile); \
+	docker run \
 		--name gocryptfs \
 		--user root \
 		--cap-add SYS_ADMIN \
@@ -241,8 +289,9 @@ restore_as_root_to_origin: check-passkey
 		--volume ${RESTORE_EXCLUDE_LIST}:/restore/restore-exclude-list.txt \
 		--volume ${SSH_KEY_FILE}:/root/.ssh/id_rsa \
 		--volume ${SSH_KNOWN_HOSTS_FILE}:/root/.ssh/known_hosts \
-		--volume ${GOCRYPTFS_PASSKEY_FILE}:/restore/passfile \
+		$$_pv \
 		--env RESTORE_PATHS='${RESTORE_PATHS}' \
+		--env PARANOID_MODE=$$_paranoid \
 		--rm \
 		--interactive --tty ${DOCKER_IMAGE_TAG_NAME}:${DOCKER_IMAGE_TAG_VERSION} \
 		/app/restore.sh \
@@ -259,8 +308,9 @@ restore_as_root_to_origin: check-passkey
 
 # Serves the decrypted backup read-only over SFTP on host port 2222 (user backup).
 # Connect your file manager to: sftp://root@localhost:2222/gocrypt-view/decrypted
-view: check-passkey
-	@docker run \
+view:
+	@$(call _passkey_check,/gocrypt-view/passfile); \
+	docker run \
 		--name gocryptfs \
 		--user root \
 		--cap-add SYS_ADMIN \
@@ -271,7 +321,8 @@ view: check-passkey
 		--publish 127.0.0.1:2222:22 \
 		--volume ${SSH_KEY_FILE}:/root/.ssh/id_rsa \
 		--volume ${SSH_KNOWN_HOSTS_FILE}:/root/.ssh/known_hosts \
-		--volume ${GOCRYPTFS_PASSKEY_FILE}:/gocrypt-view/passfile \
+		$$_pv \
+		--env PARANOID_MODE=$$_paranoid \
 		--rm \
 		--interactive --tty ${DOCKER_IMAGE_TAG_NAME}:${DOCKER_IMAGE_TAG_VERSION} \
 		/app/view.sh \
@@ -283,8 +334,9 @@ view: check-passkey
 
 # Serves the decrypted backup read-only over SFTP on host port 2222 (root backup).
 # Connect your file manager to: sftp://root@localhost:2222/gocrypt-view/decrypted
-view_as_root: check-passkey
-	@docker run \
+view_as_root:
+	@$(call _passkey_check,/gocrypt-view/passfile); \
+	docker run \
 		--name gocryptfs \
 		--user root \
 		--cap-add SYS_ADMIN \
@@ -295,7 +347,8 @@ view_as_root: check-passkey
 		--publish 127.0.0.1:2222:22 \
 		--volume ${SSH_KEY_FILE}:/root/.ssh/id_rsa \
 		--volume ${SSH_KNOWN_HOSTS_FILE}:/root/.ssh/known_hosts \
-		--volume ${GOCRYPTFS_PASSKEY_FILE}:/gocrypt-view/passfile \
+		$$_pv \
+		--env PARANOID_MODE=$$_paranoid \
 		--rm \
 		--interactive --tty ${DOCKER_IMAGE_TAG_NAME}:${DOCKER_IMAGE_TAG_VERSION} \
 		/app/view.sh \
@@ -306,7 +359,8 @@ view_as_root: check-passkey
 			"/gocrypt-view/decrypted"
 
 run_container:
-	@docker run \
+	@$(call _passkey_check,/backup/passfile); \
+	docker run \
 		--name gocryptfs \
 		--user root \
 		--cap-add SYS_ADMIN \
@@ -317,12 +371,14 @@ run_container:
 		--volume ${BACKUP_SOURCE_FOLDER}:/backup/src \
 		--volume ${BACKUP_FILTER_RULES}:/backup/brave-filter-rules.txt \
 		--volume ${SSH_KEY_FILE}:/home/crypt/.ssh/id_rsa \
-		--volume ${GOCRYPTFS_PASSKEY_FILE}:/backup/passfile \
+		$$_pv \
+		--env PARANOID_MODE=$$_paranoid \
 		--rm \
 		--interactive --tty ${DOCKER_IMAGE_TAG_NAME}:${DOCKER_IMAGE_TAG_VERSION}
 
 run_container_as_root:
-	@docker run \
+	@$(call _passkey_check,/backup/passfile); \
+	docker run \
 		--name gocryptfs \
 		--user root \
 		--cap-add SYS_ADMIN \
@@ -338,6 +394,7 @@ run_container_as_root:
 		--volume ${BACKUP_FILTER_RULES}:/backup/brave-filter-rules.txt \
 		--volume ${BACKUP_ENCRYPTION_CONF}:/backup/src/.gocryptfs.reverse.conf.original \
 		--volume ${SSH_KEY_FILE}:/root/.ssh/id_rsa \
-		--volume ${GOCRYPTFS_PASSKEY_FILE}:/backup/passfile \
+		$$_pv \
+		--env PARANOID_MODE=$$_paranoid \
 		--rm \
 		--interactive --tty ${DOCKER_IMAGE_TAG_NAME}:${DOCKER_IMAGE_TAG_VERSION}

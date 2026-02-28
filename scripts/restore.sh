@@ -27,6 +27,9 @@ set -o errexit  # make your script exit when a command fails
 set -o pipefail # exit status of the last command that threw a non-zero exit code is returned
 set -o nounset  # exit when your script tries to use undeclared variables
 
+# read paranoid mode flag (passed by Docker via --env PARANOID_MODE)
+__paranoid_mode=${PARANOID_MODE:-false}
+
 # binaries list
 __BINARIES_LIST__="fusermount"
 __BINARIES_LIST__+=" gocryptfs"
@@ -102,7 +105,15 @@ if find "${__restore_decrypted_folder}" -mindepth 1 -maxdepth 1 -print -quit 2>/
     exit 1
 fi
 
-if ! gocryptfs -ro -nosyslog -passfile "${__restore_passkey_file}" "${__restore_encrypted_folder}" "${__restore_decrypted_folder}"; then
+if [ "${__paranoid_mode}" = "true" ]; then
+    echo "PARANOID MODE: passphrase will be entered interactively."
+    __gocryptfs_passfile_args=""
+else
+    __gocryptfs_passfile_args="-passfile ${__restore_passkey_file}"
+fi
+
+# shellcheck disable=SC2086
+if ! gocryptfs -ro -nosyslog ${__gocryptfs_passfile_args} "${__restore_encrypted_folder}" "${__restore_decrypted_folder}"; then
     echo "gocryptfs failed"
     exit 1
 fi

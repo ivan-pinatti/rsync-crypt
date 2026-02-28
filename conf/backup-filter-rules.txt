@@ -29,6 +29,14 @@
 # backup folder itself (prevents recursive backup)
 - backup
 
+# network mount points
+# Note: rsync does not distinguish mount points from regular directories.
+# List any directories used as network mount points so they are not traversed.
+# Common patterns: GNOME virtual filesystem, sshfs, rclone, NFS user mounts.
+- .gvfs
+# - mnt
+# - media
+
 # flatpak app data (caches, reinstallable)
 - .var
 

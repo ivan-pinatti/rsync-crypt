@@ -27,6 +27,9 @@ set -o errexit  # make your script exit when a command fails
 set -o pipefail # exit status of the last command that threw a non-zero exit code is returned
 set -o nounset  # exit when your script tries to use undeclared variables
 
+# read paranoid mode flag (passed by Docker via --env PARANOID_MODE)
+__paranoid_mode=${PARANOID_MODE:-false}
+
 # binaries list
 __BINARIES_LIST__="fusermount"
 __BINARIES_LIST__+=" gocryptfs"
@@ -77,8 +80,12 @@ if [ -n "$(find "${__backup_encrypted_folder}" -mindepth 1 -maxdepth 1 -print -q
     exit 1
 fi
 
-if test -f "${__backup_passkey_file}"; then
+if [ "${__paranoid_mode}" = "true" ]; then
+    echo "PARANOID MODE: passphrase will be entered interactively."
+    __gocryptfs_passfile_args=""
+elif test -f "${__backup_passkey_file}"; then
     echo "Gocryptfs passfile found, proceeding..."
+    __gocryptfs_passfile_args="-passfile ${__backup_passkey_file}"
 else
     echo "ERROR! Gocryptfs passfile NOT found, aborting..."
     exit 1
@@ -98,13 +105,18 @@ if [ ! -s "${__backup_source}/.gocryptfs.reverse.conf.original" ]; then
            "${__backup_source}/.gocryptfs.reverse.conf.original"
         chmod 600 "${__backup_source}/.gocryptfs.reverse.conf.original"
     else
+        echo "================================================================"
+        echo "  FIRST-TIME INITIALIZATION"
+        echo "  gocryptfs is about to display the MASTER KEY."
+        echo "  Write it down and store it securely BEFORE pressing O."
+        echo "  The master key is never stored to disk; it is shown ONLY ONCE."
+        echo "  Without it, a lost passphrase makes the backup unrecoverable."
+        echo "================================================================"
         if [ "${__gocryptfs_encrypt_names}" = "true" ]; then
-            echo "Initializing read-only encrypted view of the unencrypted directory ${__backup_source},"
-            echo "with encrypted file names (names are scrambled on the remote server)."
+            echo "Initializing encrypted view of ${__backup_source} (filenames will be scrambled on remote)."
             __plaintextnames_flag=""
         else
-            echo "Initializing read-only encrypted view of the unencrypted directory ${__backup_source},"
-            echo "with plaintext file names (names are visible on the remote server)."
+            echo "Initializing encrypted view of ${__backup_source} (filenames visible on remote)."
             __plaintextnames_flag="-plaintextnames"
         fi
         case "${__gocryptfs_cipher}" in
@@ -117,14 +129,21 @@ if [ ! -s "${__backup_source}/.gocryptfs.reverse.conf.original" ]; then
             ${__plaintextnames_flag} \
             ${__cipher_flag} \
             -scryptn "${__gocryptfs_scrypt_n}" \
-            "${__backup_source}" -passfile "${__backup_passkey_file}"
+            "${__backup_source}" ${__gocryptfs_passfile_args}
         cp "${__backup_source}/.gocryptfs.reverse.conf" "${__backup_source}/.gocryptfs.reverse.conf.original"
         chmod 600 "${__backup_source}/.gocryptfs.reverse.conf" \
                   "${__backup_source}/.gocryptfs.reverse.conf.original"
-        read -r -p "Press O for Okay to continue..." input
+        echo ""
+        echo "================================================================"
+        echo "  Config saved:    ${__backup_source}/.gocryptfs.reverse.conf"
+        echo "  Reference copy:  ${__backup_source}/.gocryptfs.reverse.conf.original"
+        echo "  Back up both files and your passphrase file off-machine."
+        echo "================================================================"
+        read -r -p "Press O once you have saved the master key shown above: " input
         while [[ "$input" != "O" && "$input" != "o" ]]; do
-            read -r -p "Please press O to continue..." input
+            read -r -p "Please press O to confirm the master key is saved: " input
         done
+        printf '\033c' # clear the terminal so the master key is no longer visible
     fi
 else
     cp "${__backup_source}/.gocryptfs.reverse.conf.original" "${__backup_source}/.gocryptfs.reverse.conf"
@@ -132,7 +151,8 @@ else
 fi
 
 # mount read-only encrypted virtual copy of unencrypted local data:
-if gocryptfs -ro -nosyslog -passfile "${__backup_passkey_file}" -reverse "${__backup_source}" "${__backup_encrypted_folder}"; then
+# shellcheck disable=SC2086
+if gocryptfs -ro -nosyslog ${__gocryptfs_passfile_args} -reverse "${__backup_source}" "${__backup_encrypted_folder}"; then
     echo "gocryptfs succeeded -> the decrypted dir ${__backup_source} is virtually encrypted in ${__backup_encrypted_folder}"
 else
     echo "gocryptfs failed"
