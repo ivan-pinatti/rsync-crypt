@@ -374,6 +374,31 @@ Set `RSYNC_RATE_LIMIT` in `.env` (kbytes/s) or override at runtime:
 RSYNC_RATE_LIMIT=5000 make backup   # limit to ~5 MB/s
 ```
 
+#### Paranoid Mode
+
+By default the passphrase is read from `GOCRYPTFS_PASSKEY_FILE` on disk. If you prefer to never store the passphrase on disk at all, enable paranoid mode. gocryptfs will prompt you to type it interactively on every run and it is never written anywhere.
+
+Enable permanently in `.env`:
+
+```dotenv
+PARANOID_MODE=true
+```
+
+Or override for a single run:
+
+```bash
+PARANOID_MODE=true make backup
+PARANOID_MODE=true make backup_as_root
+```
+
+When paranoid mode is active:
+
+- `GOCRYPTFS_PASSKEY_FILE` is ignored entirely
+- No passkey volume is mounted into the container
+- gocryptfs prompts `Password:` on stdin at startup
+
+> **Note:** Paranoid mode requires an interactive terminal (`--interactive --tty` is already set by all `make` targets). It cannot be used with cron jobs or any non-interactive scheduler.
+
 ---
 
 ### View
@@ -410,6 +435,17 @@ sftp://root@localhost:2222/gocrypt-view/decrypted
 > **Security note:** The SFTP port is bound to `127.0.0.1` only, it is not reachable from the network. Authentication uses your existing SSH key, no password is required.
 
 When you are done browsing, press **Enter** in the terminal. The view will unmount cleanly and the container exits.
+
+#### Paranoid Mode
+
+The same `PARANOID_MODE` flag applies to view:
+
+```bash
+PARANOID_MODE=true make view
+PARANOID_MODE=true make view_as_root
+```
+
+gocryptfs will prompt for the passphrase before mounting the decrypted view. The passphrase is never stored on disk.
 
 ---
 
