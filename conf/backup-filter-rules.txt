@@ -1,0 +1,248 @@
+# =============================================================================
+# rsync filter rules,used with --filter='. FILE' (merge directive)
+# Syntax: "+ pattern" to include, "- pattern" to exclude
+# Rules are evaluated top-to-bottom; first match wins.
+# Parent directories must be explicitly included for rsync to traverse into them.
+# =============================================================================
+
+# =============================================================================
+# General exclusions
+# =============================================================================
+
+# lock and live write-ahead log files (unreadable while applications are running)
+- **/*.lock
+- **/*.db-wal
+- **/*.db-shm
+- **/*.sqlite-wal
+- **/*.sqlite-shm
+- **/LOCK
+
+# system caches
+- **/.cache
+
+# trash
+- .local/share/Trash/**
+
+# docker local data
+- .local/share/docker
+
+# backup folder itself (prevents recursive backup)
+- backup
+
+# flatpak app data (caches, reinstallable)
+- .var
+
+# development tools (reinstallable)
+- .asdf
+
+# local kubernetes / containers (ephemeral)
+- .minikube
+- .local/share/containers
+
+# steam (reinstallable)
+- .local/share/Steam
+
+# claude local data
+- .local/share/claude
+
+# terraform temp files (downloaded providers, regenerable with terraform init)
+- **/.terraform
+
+# =============================================================================
+# Chromium-based browsers: Brave, Chrome, Chromium
+# Traversal + state + profile-dir rules are per-browser (paths differ).
+# Profile content rules use ** to cover all three in one line each.
+# =============================================================================
+
+# Allow traversal (Brave has an extra BraveSoftware/Brave-Browser/ level)
++ .config/BraveSoftware/
++ .config/BraveSoftware/Brave-Browser/
++ .config/google-chrome/
++ .config/chromium/
+
+# Browser-wide state
++ .config/BraveSoftware/Brave-Browser/Local State
++ .config/google-chrome/Local State
++ .config/chromium/Local State
+
+# Profile directories
++ .config/BraveSoftware/Brave-Browser/Default/
++ .config/BraveSoftware/Brave-Browser/Profile */
++ .config/google-chrome/Default/
++ .config/google-chrome/Profile */
++ .config/chromium/Default/
++ .config/chromium/Profile */
+
+# Profile content,** covers all three browsers' profiles in one rule each
++ .config/**/Bookmarks
++ .config/**/Bookmarks.bak
++ .config/**/Preferences
++ .config/**/Secure Preferences
++ .config/**/Extensions/
++ .config/**/Extensions/**
++ .config/**/Local Extension Settings/
++ .config/**/Local Extension Settings/**
++ .config/**/Extension State/
++ .config/**/Extension State/**
+
+# Optional,uncomment to also back up history, passwords, cookies
+# + .config/**/Favicons
+# + .config/**/History
+# + .config/**/Login Data
+# + .config/**/Cookies
+# + .config/**/Web Data
+
+# Catch-all: exclude everything else in these browser directories
+- .config/BraveSoftware/**
+- .config/google-chrome/**
+- .config/chromium/**
+
+# =============================================================================
+# Firefox,include important data, exclude cache and heavy files
+# Profile directories have random names (e.g. xxxxxxxx.default-release).
+# =============================================================================
+
+# Allow traversal
++ .mozilla/
++ .mozilla/firefox/
+
+# Profile list and installation info
++ .mozilla/firefox/profiles.ini
++ .mozilla/firefox/installs.ini
+
+# Profile directories (random names,matched with *)
++ .mozilla/firefox/*/
+
+# Bookmarks, history, downloads
++ .mozilla/firefox/*/places.sqlite
++ .mozilla/firefox/*/favicons.sqlite
++ .mozilla/firefox/*/bookmarkbackups/
++ .mozilla/firefox/*/bookmarkbackups/**
+
+# Preferences
++ .mozilla/firefox/*/prefs.js
++ .mozilla/firefox/*/user.js
+
+# Extensions and their data
++ .mozilla/firefox/*/extensions/
++ .mozilla/firefox/*/extensions/**
++ .mozilla/firefox/*/extension-preferences.json
++ .mozilla/firefox/*/extension-settings.json
++ .mozilla/firefox/*/browser-extension-data/
++ .mozilla/firefox/*/browser-extension-data/**
+
+# Search engines, containers, certificates, passwords
++ .mozilla/firefox/*/search.json.mozlz4
++ .mozilla/firefox/*/containers.json
++ .mozilla/firefox/*/cert9.db
++ .mozilla/firefox/*/key4.db
++ .mozilla/firefox/*/logins.json
+
+# Optional,uncomment to also back up cookies and session
+# + .mozilla/firefox/*/cookies.sqlite
+# + .mozilla/firefox/*/sessionstore.jsonlz4
+
+# Catch-all: exclude everything else in Firefox
+# (covers cache2, startupCache, thumbnails, storage, crashes, datareporting, etc.)
+- .mozilla/**
+
+# =============================================================================
+# Tor Browser — include profile data, exclude binary, cache, and startup cache
+# Assumes torbrowser-launcher managed install on x86_64 Linux.
+# For ARM or manual installs, adjust the traversal path accordingly.
+# =============================================================================
+
+# Allow traversal to the profile directory (each level required to bypass the catch-all)
++ .local/share/torbrowser/
++ .local/share/torbrowser/tbb/
++ .local/share/torbrowser/tbb/x86_64/
++ .local/share/torbrowser/tbb/x86_64/tor-browser/
++ .local/share/torbrowser/tbb/x86_64/tor-browser/Browser/
++ .local/share/torbrowser/tbb/x86_64/tor-browser/Browser/TorBrowser/
++ .local/share/torbrowser/tbb/x86_64/tor-browser/Browser/TorBrowser/Data/
++ .local/share/torbrowser/tbb/x86_64/tor-browser/Browser/TorBrowser/Data/Browser/
++ .local/share/torbrowser/tbb/x86_64/tor-browser/Browser/TorBrowser/Data/Browser/profile.default/
+
+# Exclude cache and regenerable data inside the profile (must precede the broad include below)
+- .local/share/torbrowser/**/cache2/
+- .local/share/torbrowser/**/startupCache/
+
+# Include all remaining profile data (bookmarks, prefs, extensions, certificates, logins, etc.)
++ .local/share/torbrowser/tbb/x86_64/tor-browser/Browser/TorBrowser/Data/Browser/profile.default/**
+
+# Catch-all: exclude browser binary, libraries, and everything outside the profile
+- .local/share/torbrowser/**
+
+# =============================================================================
+# VSCode,include user config, exclude cache and heavy data
+# /.vscode/ is anchored (leading /) so it only matches ~/.vscode, not project
+# .vscode dirs. The unanchored - .vscode catch-all below handles those.
+# =============================================================================
+
+# Allow traversal into user-data directory
++ .config/Code/
++ .config/Code/User/
+
+# User settings and customizations
++ .config/Code/User/settings.json
++ .config/Code/User/keybindings.json
++ .config/Code/User/tasks.json
++ .config/Code/User/snippets/
++ .config/Code/User/snippets/**
++ .config/Code/User/profiles/
++ .config/Code/User/profiles/**
+
+# Root-level .vscode dir (global startup arguments)
++ /.vscode/
++ /.vscode/argv.json
+
+# Optional,uncomment to also back up installed extensions (can be several GBs)
+# + /.vscode/extensions/
+# + /.vscode/extensions/**
+
+# Catch-all:
+# - /.vscode/** excludes unincluded parts of ~/.vscode (anchored, root only)
+# - .vscode excludes all project-level .vscode directories (unanchored)
+# - .config/Code/** excludes logs, cache, CachedData, Workspaces, etc.
+- /.vscode/**
+- .vscode
+- .config/Code/**
+
+# =============================================================================
+# Lens Desktop,include cluster configs and settings, exclude cache
+# =============================================================================
+
+# Allow traversal
++ .config/Lens/
+
+# JSON config files at the root (settings, preferences, catalog, etc.)
++ .config/Lens/*.json
+
+# Cluster kubeconfig files stored by Lens
++ .config/Lens/kubeconfigs/
++ .config/Lens/kubeconfigs/**
+
+# Optional,uncomment to also back up installed Lens extensions (reinstallable)
+# + .config/Lens/extensions/
+# + .config/Lens/extensions/**
+
+# Catch-all: exclude everything else (Cache, Code Cache, GPUCache, logs, etc.)
+- .config/Lens/**
+
+# =============================================================================
+# Spotify — include user preferences, exclude cache and downloaded tracks
+# Note: ~/.cache/spotify/ is already excluded by the global **/.cache rule above.
+# =============================================================================
+
+# Allow traversal
++ .config/spotify/
+
+# User preferences (audio quality, UI settings, etc.)
++ .config/spotify/prefs
+
+# Catch-all: exclude everything else (logs, crash reports, etc.)
+- .config/spotify/**
+
+# Exclude Spotify data in other common locations (offline cache, downloaded tracks)
+- .local/share/Spotify/**
+- snap/spotify/**

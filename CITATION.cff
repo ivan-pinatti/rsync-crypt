@@ -1,0 +1,27 @@
+cff-version: 1.2.0
+message: >
+  If you use this software — entirely or partially, directly or as inspiration —
+  please cite it using the metadata below and consider supporting the author.
+title: rsync-crypt
+abstract: >
+  Encrypted backup over SSH using Docker, gocryptfs, and rsync.
+  Backs up files to any SSH-accessible server without the server ever seeing
+  plaintext data. Includes a read-only viewer mode for browsing decrypted
+  backups via any GUI file manager.
+authors:
+  - name: Ivan Pinatti
+    alias: ivan-pinatti
+    url: https://github.com/ivan-pinatti
+license: MIT
+repository-code: https://github.com/ivan-pinatti/rsync-crypt
+url: https://github.com/ivan-pinatti/rsync-crypt
+keywords:
+  - backup
+  - encryption
+  - gocryptfs
+  - rsync
+  - docker
+  - sshfs
+  - fuse
+  - privacy
+date-released: "2026-02-28"

@@ -1,0 +1,17 @@
+# Paths to selectively restore, relative to the backup root.
+# One path per line. Blank lines and lines starting with # are ignored.
+# Leave all lines commented/empty to perform a FULL restore.
+#
+# For user restore (make restore / make restore_to_origin):
+# Paths are relative to the backed-up home directory.
+# Examples:
+#Documents/
+#.config/Code/User/
+#.mozilla/
+#
+# For root restore (make restore_as_root / make restore_as_root_to_origin):
+# Paths include the top-level directory (etc, home, opt, root, srv).
+# Examples:
+#home/user/Documents/
+#home/user/.config/Code/User/
+#etc/ssh/

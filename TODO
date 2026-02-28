@@ -1,0 +1,18 @@
+- PRE-COMMIT
+[x] Remove Docker compose
+[] Add Docker check - Hadolint
+
+- DOCKERFILE
+[x] Add variables for the gocryptfs version
+[x] Add variables for the Docker image version
+
+- OTHERS
+[] Remove the running container when pressing CTRL+C
+[] Create a list of excluded files (rsync --dry-run)
+[] Sometimes it fails because Docker haven't finished the volume mounting, I've added a sleep command to
+
+- DONE
+[x] SwitchToSyslog: Unix syslog delivery error
+[x] SwitchLoggerToSyslog: Unix syslog delivery error
+fix it for now
+[x] one-file-system option removed - It could prevent backing up mounted paths; https://github.com/rfjakob/gocryptfs/blob/master/Documentation/MANPAGE.md#user-content--one-file-system
