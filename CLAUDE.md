@@ -7,16 +7,16 @@ Makefile-driven. Alpine image. Key binaries: gocryptfs, rsync, sshfs, openssh (s
 
 ## Key Files
 
-| File                            | Purpose                                                     |
-| ------------------------------- | ----------------------------------------------------------- |
-| `Makefile`                      | All targets; reads `.env` via `include .env`                |
-| `.env`                          | User config (not committed); `.env.example` is the template |
-| `scripts/backup.sh`             | Main backup script, called inside Docker                    |
-| `scripts/restore.sh`            | Restore script                                              |
-| `scripts/view.sh`               | SFTP view mode via sshd inside container                    |
-| `conf/backup-filter-rules.txt`  | rsync filter rules (+ include, - exclude)                   |
-| `conf/restore-exclude-list.txt` | Restore exclusions                                          |
-| `conf/restore-paths.txt`        | Selective restore paths (empty = restore all)               |
+| File                            | Purpose                                                                    |
+| ------------------------------- | -------------------------------------------------------------------------- |
+| `Makefile`                      | All targets; reads env file via `ENV_FILE ?= .env` + `include $(ENV_FILE)` |
+| `.env`                          | User config (not committed); `.env.example` is the template                |
+| `scripts/backup.sh`             | Main backup script, called inside Docker                                   |
+| `scripts/restore.sh`            | Restore script                                                             |
+| `scripts/view.sh`               | SFTP view mode via sshd inside container                                   |
+| `conf/backup-filter-rules.txt`  | rsync filter rules (+ include, - exclude)                                  |
+| `conf/restore-exclude-list.txt` | Restore exclusions                                                         |
+| `conf/restore-paths.txt`        | Selective restore paths (empty = restore all)                              |
 
 ## Architecture
 
@@ -33,6 +33,7 @@ Default is `false`. File contents are still fully encrypted either way.
 gocryptfs has `-exclude-wildcard` with gitignore negation, but the include-first
 catch-all-exclude pattern in the filter file cannot be expressed with excludes alone.
 Wiring gocryptfs `-exclude-from` instead of rsync filters is a planned future improvement.
+Upstream: https://github.com/rfjakob/gocryptfs/issues/1000 proposes a `-filter-from` flag with rsync-style first-match-wins semantics.
 
 ### Alpine gocryptfs version
 

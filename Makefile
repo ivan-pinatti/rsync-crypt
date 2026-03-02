@@ -1,4 +1,5 @@
-include .env
+ENV_FILE ?= .env
+include $(ENV_FILE)
 
 SHELL := /bin/bash
 

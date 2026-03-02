@@ -82,6 +82,7 @@ Please make sure pre-commit hooks pass before submitting (`pre-commit run --all-
 - [Installation](#installation)
 - [Configuration](#configuration)
   - [Environment Variables](#environment-variables)
+  - [Multiple Configurations](#multiple-configurations)
   - [Filter Rules](#filter-rules)
 - [Security and Key Management](#security-and-key-management)
 - [Usage](#usage)
@@ -239,6 +240,22 @@ PARANOID_MODE=false # true = never store passphrase on disk, gocryptfs prompts i
 | `GOCRYPTFS_CIPHER`            | Encryption cipher used at first init: `aes-gcm` (default), `aes-siv`, `xchacha`                                                                                                              |
 | `GOCRYPTFS_SCRYPT_N`          | scrypt key derivation cost exponent (default `16`, meaning 2^16 iterations)                                                                                                                  |
 | `PARANOID_MODE`               | `false` (default). When `true`, the passphrase is never written to disk; gocryptfs prompts interactively on each run. `GOCRYPTFS_PASSKEY_FILE` is ignored. Requires an interactive terminal. |
+
+### Multiple Configurations
+
+To use a different environment file without modifying `.env`, pass `ENV_FILE` on the command line or via the shell environment:
+
+```bash
+# Command-line variable
+make backup ENV_FILE=.env.work
+
+# Shell environment variable
+ENV_FILE=.env.work make backup
+```
+
+Copy `.env.example` to `.env.work` (or `.env.personal`, etc.) and fill in the values for each profile. The default is `.env` when `ENV_FILE` is not set, so existing setups are unaffected.
+
+> **Note:** `.env` and `.env.*` are both listed in `.gitignore`, so all profile files are excluded from version control by default.
 
 ### Filter Rules
 
@@ -493,7 +510,7 @@ Setting `GOCRYPTFS_ENCRYPT_NAMES=true` causes rsync filter rules to stop working
 
 **Current default:** `GOCRYPTFS_ENCRYPT_NAMES=false`. File and directory **contents** are still fully encrypted by gocryptfs; only the names and paths are stored in plaintext on the remote server. For most home backup scenarios this is an acceptable trade-off: the remote server can see your directory structure (revealing which applications you use) but cannot read any file content without your passphrase.
 
-**Why not use gocryptfs's own exclude flags?** gocryptfs reverse mode does support `-exclude-wildcard` with gitignore-style negation patterns (e.g., `-exclude-wildcard '*' -exclude-wildcard '!/important'`), which operate on plaintext paths before encryption. However, the rsync filter syntax used in this project (specifically the include-first, catch-all-exclude pattern used in the browser and Firefox sections) cannot be expressed with exclusion-only patterns alone. Supporting this properly would require replacing the rsync filter file with a gocryptfs-native exclude file and rearchitecting how filtering is wired through the tool. This is a planned improvement for a future version.
+**Why not use gocryptfs's own exclude flags?** gocryptfs reverse mode does support `-exclude-wildcard` with gitignore-style negation patterns (e.g., `-exclude-wildcard '*' -exclude-wildcard '!/important'`), which operate on plaintext paths before encryption. However, the rsync filter syntax used in this project (specifically the include-first, catch-all-exclude pattern used in the browser and Firefox sections) cannot be expressed with exclusion-only patterns alone. Supporting this properly would require replacing the rsync filter file with a gocryptfs-native exclude file and rearchitecting how filtering is wired through the tool. This is a planned improvement for a future version. Upstream tracking: [gocryptfs#1000](https://github.com/rfjakob/gocryptfs/issues/1000) proposes a `-filter-from` flag with rsync-style first-match-wins semantics that would solve this cleanly.
 
 **If you want scrambled filenames today** and are willing to trade fine-grained filtering for privacy: set `GOCRYPTFS_ENCRYPT_NAMES=true` and simplify `conf/backup-filter-rules.txt` to keep only the top-level exclusion rules (the `- **/.cache`, `- .local/share/Trash/**`, etc. lines under "General exclusions"). Then pass a plain exclude list to gocryptfs's `-exclude-from` flag instead of rsync. This requires manual changes to `scripts/backup.sh` and is not currently supported out of the box.
 

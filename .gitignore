@@ -26,6 +26,8 @@ jspm_packages/
 
 # dotenv ###
 .env
+.env.*
+!.env.example
 
 # known hosts
 files/ssh/known_hosts
