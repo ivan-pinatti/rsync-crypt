@@ -1,5 +1,27 @@
 ENV_FILE ?= .env
+
+define _missing_env_file_message
+
+Missing ENV_FILE '$(ENV_FILE)'.
+
+Usage:
+  ENV_FILE=.env.myconfig make <target>
+
+You can also use:
+  make <target> ENV_FILE=.env.myconfig
+
+If the file does not exist yet, create it first:
+  cp .env.example .env.myconfig
+endef
+
+ifeq ($(MAKECMDGOALS),help)
+else
+ifeq ($(wildcard $(ENV_FILE)),)
+$(error $(_missing_env_file_message))
+endif
+
 include $(ENV_FILE)
+endif
 
 SHELL := /bin/bash
 
@@ -38,12 +60,21 @@ else \
 fi
 endef
 
-.PHONY: build backup backup_as_root \
+.PHONY: help build backup backup_as_root \
         restore restore_to_origin restore_as_root restore_as_root_to_origin \
         view view_as_root \
         run_container run_container_as_root check-passkey clean
 
 all: build run_container
+
+help:
+	@echo "Usage:"
+	@echo "  make <target>"
+	@echo "  ENV_FILE=.env.myconfig make <target>"
+	@echo "  make <target> ENV_FILE=.env.myconfig"
+	@echo
+	@echo "If the env file does not exist, create it first:"
+	@echo "  cp .env.example .env.myconfig"
 
 # build and backup
 bb: build backup

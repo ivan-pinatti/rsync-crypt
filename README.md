@@ -247,13 +247,13 @@ To use a different environment file without modifying `.env`, pass `ENV_FILE` on
 
 ```bash
 # Command-line variable
-make backup ENV_FILE=.env.work
+make backup ENV_FILE=.env.myconfig
 
 # Shell environment variable
-ENV_FILE=.env.work make backup
+ENV_FILE=.env.myconfig make backup
 ```
 
-Copy `.env.example` to `.env.work` (or `.env.personal`, etc.) and fill in the values for each profile. The default is `.env` when `ENV_FILE` is not set, so existing setups are unaffected.
+Copy `.env.example` to `.env.myconfig` (or `.env.personal`, etc.) and fill in the values for each profile. The default is `.env` when `ENV_FILE` is not set, so existing setups are unaffected.
 
 > **Note:** `.env` and `.env.*` are both listed in `.gitignore`, so all profile files are excluded from version control by default.
 
